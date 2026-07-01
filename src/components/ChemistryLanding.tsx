@@ -8,14 +8,14 @@ interface ChemistryLandingProps {
   darkMode: boolean;
 }
 
-// Generate stars for the parallax space background
-interface Star {
+interface Star3D {
   id: number;
-  x: number;
-  y: number;
+  x: number; // percentage from center
+  y: number; // percentage from center
+  z: number; // Z depth in pixels (-100 to -2200)
   size: number;
   opacity: number;
-  depth: number; // 1 (deep), 2 (mid), 3 (foreground)
+  angle: number; // pre-calculated angle from center for warp stretch
 }
 
 export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: ChemistryLandingProps) {
@@ -34,20 +34,31 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
   const [activeSection, setActiveSection] = useState(0);
   const [warpActive, setWarpActive] = useState(false);
 
-  // Static list of stars to avoid re-renders
-  const [stars, setStars] = useState<Star[]>([]);
+  // Velocity tracking for star warp stretch
+  const [velocity, setVelocity] = useState(0);
+  const lastProgress = useRef(0);
+  const velocityRef = useRef(0);
+
+  // 3D Starfield list
+  const [stars, setStars] = useState<Star3D[]>([]);
 
   useEffect(() => {
-    // Generate 150 randomized stars divided into 3 parallax depths
-    const generatedStars: Star[] = [];
-    for (let i = 0; i < 160; i++) {
+    // Generate 180 stars scattered in a 3D volume
+    const generatedStars: Star3D[] = [];
+    for (let i = 0; i < 185; i++) {
+      // Generate coordinates centered around (50, 50)
+      const rx = (Math.random() - 0.5) * 110; 
+      const ry = (Math.random() - 0.5) * 110;
+      const angle = Math.atan2(ry, rx);
+      
       generatedStars.push({
         id: i,
-        x: Math.random() * 100, // percentage x
-        y: Math.random() * 100, // percentage y
-        size: Math.random() * 1.8 + 0.6,
-        opacity: Math.random() * 0.8 + 0.2,
-        depth: Math.floor(Math.random() * 3) + 1, // 1, 2, or 3
+        x: rx + 50,
+        y: ry + 50,
+        z: -150 - Math.random() * 2050, // depth from -150px to -2200px
+        size: Math.random() * 2.2 + 0.8,
+        opacity: Math.random() * 0.7 + 0.3,
+        angle,
       });
     }
     setStars(generatedStars);
@@ -72,13 +83,22 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
     let animId: number;
     
     const updateInterpolation = () => {
+      // 1. Smoothly interpolate progress
       const diff = targetScrollProgress.current - currentScrollProgress.current;
-      currentScrollProgress.current += diff * 0.09; // Easing constant
+      currentScrollProgress.current += diff * 0.08; // Easing constant
       const progress = currentScrollProgress.current;
       setScrollProgress(progress);
 
-      // Section triggers based on scroll progress
-      if (progress < 0.3) {
+      // 2. Calculate scroll velocity for warp stretch
+      const rawVelocity = Math.abs(progress - lastProgress.current);
+      lastProgress.current = progress;
+      
+      // Smooth out the velocity values
+      velocityRef.current = rawVelocity * 0.75 + velocityRef.current * 0.25;
+      setVelocity(velocityRef.current);
+
+      // 3. Section triggers based on scroll progress
+      if (progress < 0.28) {
         setActiveSection(0);
       } else if (progress < 0.65) {
         setActiveSection(1);
@@ -125,237 +145,295 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
     }
   };
 
-  // --- Dynamic Scroll Animation Calculations ---
-  // Earth starts normal and scales up past the viewport (zooming past the viewer)
-  const earthScale = 1 + scrollProgress * 15;
-  const earthOpacity = scrollProgress < 0.4 ? 1 - scrollProgress * 2.5 : 0;
-  
-  // Moon starts small and scales up to focal size, centering on the screen
-  const moonScale = scrollProgress < 0.25 ? 0.05 : 0.05 + (scrollProgress - 0.25) * 1.6;
-  const moonOpacity = scrollProgress < 0.25 ? 0 : Math.min(1, (scrollProgress - 0.25) * 5);
-  
-  // Parallax calculations for starfields (stars zoom outward from center)
-  const getStarStyle = (star: Star) => {
-    let scaleMultiplier = 1;
-    let opacityMultiplier = 1;
+  // ================= 3D CAMERA FLIGHT CALCULATIONS =================
+  // cameraZ moves from 220px (close-up on Earth surface) to -2410px (close-up on Moon surface)
+  let cameraZ = 0;
+  let cameraX = 0;
+  let cameraY = 0;
 
-    if (star.depth === 1) {
-      // Deep stars: slow zoom
-      scaleMultiplier = 1 + scrollProgress * 1.5;
-    } else if (star.depth === 2) {
-      // Mid stars: moderate zoom
-      scaleMultiplier = 1 + scrollProgress * 3.5;
-      opacityMultiplier = scrollProgress > 0.7 ? Math.max(0, 1 - (scrollProgress - 0.7) * 3) : 1;
+  // Earth coordinates
+  let earthX = 0;
+  let earthY = 0;
+  let earthZ = 0;
+  let earthOpacity = 1.0;
+
+  // Moon coordinates
+  const moonZ = -2450; // far in the background
+  let moonX = 0;
+  let moonY = 0;
+  let moonOpacity = 0;
+
+  if (scrollProgress < 0.25) {
+    // Stage 1: Zoom out from Earth's surface
+    // cameraZ goes from 220px to 480px
+    const localRatio = scrollProgress / 0.25;
+    cameraZ = 220 + localRatio * 260;
+    cameraX = 0;
+    cameraY = 0;
+
+    earthX = 0;
+    earthY = 0;
+    earthZ = 0;
+    earthOpacity = 1.0;
+
+    moonOpacity = 0.02; // faint outline in distance
+  } else if (scrollProgress < 0.80) {
+    // Stage 2: Space flight & Earth fly-by
+    // cameraZ flies forward from 480px to -2100px
+    const localRatio = (scrollProgress - 0.25) / 0.55;
+    cameraZ = 480 - localRatio * 2580;
+    
+    // Slight camera curve pan
+    cameraX = Math.sin(localRatio * Math.PI) * -120;
+    cameraY = Math.sin(localRatio * Math.PI) * 40;
+
+    // Earth moves off to the right side as we fly past
+    earthX = localRatio * 600;
+    earthY = localRatio * -100;
+    earthZ = localRatio * 200;
+
+    // Fade out Earth as it passes behind the camera clipping plane
+    if (cameraZ < 180) {
+      earthOpacity = Math.max(0, (cameraZ + 100) / 280);
     } else {
-      // Foreground stars: fast zoom past screen
-      scaleMultiplier = 1 + scrollProgress * 8;
-      opacityMultiplier = scrollProgress > 0.4 ? Math.max(0, 1 - (scrollProgress - 0.4) * 2) : 1;
+      earthOpacity = 1.0;
     }
 
-    // Offset coordinates to make them zoom from center
-    const xOffset = (star.x - 50) * scaleMultiplier + 50;
-    const yOffset = (star.y - 50) * scaleMultiplier + 50;
+    // Moon slowly centers and grows visible
+    moonOpacity = Math.min(1.0, localRatio * 1.5);
+  } else {
+    // Stage 3: Lunar Descent & Landing
+    // cameraZ goes from -2100px to -2410px (Landing on Moon surface)
+    const localRatio = (scrollProgress - 0.80) / 0.20;
+    cameraZ = -2100 - localRatio * 310;
+    cameraX = 0;
+    cameraY = 0;
 
-    return {
-      left: `${xOffset}%`,
-      top: `${yOffset}%`,
-      transform: `translate(-50%, -50%) scale(${star.size * (star.depth * 0.4 + 0.6)})`,
-      opacity: star.opacity * opacityMultiplier,
-    };
-  };
+    earthOpacity = 0; // completely passed
+    moonOpacity = 1.0;
+  }
 
-  // Altitude reading drops as we go from Earth orbit (e.g. 300,000 km) to Moon landing (0 km)
+  // Altitude reading calculation
   const currentAltitude = Math.max(0, Math.floor(384400 * (1 - scrollProgress)));
 
   return (
     <div 
       ref={containerRef}
-      className="relative min-h-[400vh] w-full bg-[#030712] text-slate-100 font-sans selection:bg-indigo-500/20"
+      className="relative min-h-[400vh] w-full bg-[#02040a] text-slate-100 font-sans selection:bg-indigo-500/20 overflow-x-hidden"
     >
-      {/* ================= FIXED RENDERING VIEWPORT ================= */}
-      <div className="fixed inset-0 w-full h-full overflow-hidden pointer-events-none z-0">
+      {/* ================= FIXED 3D VIEWPORT CONTAINER ================= */}
+      <div 
+        className="fixed inset-0 w-full h-full overflow-hidden pointer-events-none z-0"
+        style={{
+          perspective: '800px',
+          perspectiveOrigin: '50% 50%',
+        }}
+      >
+        {/* Ambient Cosmic Background */}
+        <div className="absolute inset-0 bg-[#02040a]" />
         
-        {/* Prismatic Nebula Background Glows */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(17,24,39,0.95)_0%,#030712_100%)]" />
-        <div className="absolute top-10 left-10 w-96 h-96 rounded-full bg-gradient-to-tr from-sky-500/5 via-indigo-500/5 to-transparent blur-[120px] mix-blend-screen" />
-        <div className="absolute bottom-10 right-10 w-[500px] h-[500px] rounded-full bg-gradient-to-br from-indigo-500/5 via-purple-500/5 to-transparent blur-[150px] mix-blend-screen" />
+        {/* Soft glowing space nebulas */}
+        <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] rounded-full bg-indigo-950/20 blur-[130px] mix-blend-screen" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] rounded-full bg-blue-950/15 blur-[150px] mix-blend-screen" />
 
-        {/* Dynamic Starfield Layer */}
-        <div className="absolute inset-0 w-full h-full select-none">
-          {stars.map((star) => (
+        {/* ================= THE 3D SCENE GRAPH ================= */}
+        <div 
+          className="absolute inset-0 w-full h-full"
+          style={{
+            transformStyle: 'preserve-3d',
+            transform: `translate3d(${-cameraX}px, ${-cameraY}px, ${cameraZ}px)`,
+            willChange: 'transform',
+          }}
+        >
+          
+          {/* 3D Starfield with velocity warp stretching */}
+          {stars.map((star) => {
+            // Stretch factor based on scroll velocity
+            const stretchFactor = 1 + velocity * 130;
+            
+            // Apply scaleX and rotate radially from center
+            const transformStr = `translate3d(${star.x - 50}vw, ${star.y - 50}vh, ${star.z}px) rotate(${star.angle}rad) scaleX(${stretchFactor})`;
+
+            return (
+              <div
+                key={star.id}
+                className="absolute w-1.5 h-1.5 bg-white rounded-full pointer-events-none"
+                style={{
+                  left: '50%',
+                  top: '50%',
+                  transform: transformStr,
+                  opacity: star.opacity,
+                  willChange: 'transform',
+                  boxShadow: star.size > 2 ? '0 0 4px rgba(255, 255, 255, 0.8)' : 'none',
+                }}
+              />
+            );
+          })}
+
+          {/* ================= 3D PLANET EARTH ================= */}
+          {earthOpacity > 0 && (
             <div
-              key={star.id}
-              className="absolute w-1 h-1 bg-white rounded-full transition-transform duration-75 ease-out"
-              style={getStarStyle(star)}
-            />
-          ))}
+              className="absolute pointer-events-none"
+              style={{
+                left: '50%',
+                top: '50%',
+                transformStyle: 'preserve-3d',
+                transform: `translate3d(calc(-50% + ${earthX}px), calc(-50% + ${earthY}px), ${earthZ}px) rotateY(${scrollProgress * 25}deg)`,
+                opacity: earthOpacity,
+                willChange: 'transform, opacity',
+              }}
+            >
+              {/* Earth SVG (HD detailed) */}
+              <svg viewBox="0 0 500 500" className="w-[420px] h-[420px] drop-shadow-[0_0_60px_rgba(59,130,246,0.3)]">
+                <defs>
+                  {/* Atmospheric edge glow */}
+                  <radialGradient id="earthGlow" cx="50%" cy="50%" r="50%">
+                    <stop offset="90%" stopColor="#1e3a8a" stopOpacity="0" />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity="0.7" />
+                    <stop offset="100%" stopColor="#60a5fa" stopOpacity="1" />
+                  </radialGradient>
+                  {/* Sphere Shading shadow */}
+                  <radialGradient id="earthShading" cx="30%" cy="30%" r="70%">
+                    <stop offset="0%" stopColor="rgba(255, 255, 255, 0.12)" />
+                    <stop offset="50%" stopColor="rgba(0, 0, 0, 0.5)" />
+                    <stop offset="92%" stopColor="rgba(0, 0, 0, 0.98)" />
+                    <stop offset="100%" stopColor="rgba(0, 0, 0, 1)" />
+                  </radialGradient>
+                  <radialGradient id="oceanGrad" cx="30%" cy="30%" r="70%">
+                    <stop offset="0%" stopColor="#2563eb" />
+                    <stop offset="100%" stopColor="#1d4ed8" />
+                  </radialGradient>
+                  <mask id="earthMask">
+                    <circle cx="250" cy="250" r="235" fill="white" />
+                  </mask>
+                </defs>
+
+                {/* Glow ring */}
+                <circle cx="250" cy="250" r="248" fill="url(#earthGlow)" />
+
+                {/* Sphere core */}
+                <g mask="url(#earthMask)">
+                  <circle cx="250" cy="250" r="235" fill="url(#oceanGrad)" />
+
+                  {/* Stylized HD Continents */}
+                  <g fill="#166534" opacity="0.95">
+                    {/* North & South Americas */}
+                    <path d="M120,80 Q100,100 110,140 T150,180 T170,260 T200,320 T210,400 T190,440 L210,460 L230,420 L220,380 L230,320 L210,280 L200,240 Q220,200 230,160 Q210,130 180,100 Z" />
+                    {/* Europe & Africa */}
+                    <path d="M300,100 Q280,120 270,160 T300,240 T360,280 T380,340 L410,320 L400,280 L440,240 Q450,180 420,130 Q380,80 320,80 Z" />
+                    <path d="M260,60 Q280,40 340,30 L380,40 L400,70 L340,90 Z" />
+                    {/* Asia */}
+                    <path d="M360,60 Q400,50 450,80 L460,130 L420,170 L380,150 Z" />
+                    <path d="M380,160 Q420,180 450,220 L430,260 L380,220 Z" />
+                    {/* Australia */}
+                    <path d="M390,360 Q420,370 430,400 L410,420 L370,400 Z" />
+                    {/* Polar Cap */}
+                    <path d="M200,18 Q250,10 280,18 L270,40 L195,35 Z" fill="#f1f5f9" />
+                  </g>
+
+                  {/* Slowly rotating cloud layer */}
+                  <g className="animate-spin" style={{ transformOrigin: '250px 250px', animationDuration: '100s' }}>
+                    <path d="M80,120 Q160,90 240,130 T340,110 T440,140" fill="none" stroke="white" strokeWidth="18" strokeLinecap="round" opacity="0.35" />
+                    <path d="M100,220 Q200,270 300,220 T420,240" fill="none" stroke="white" strokeWidth="22" strokeLinecap="round" opacity="0.38" />
+                    <path d="M90,340 Q170,290 260,350 T400,310" fill="none" stroke="white" strokeWidth="14" strokeLinecap="round" opacity="0.35" />
+                  </g>
+
+                  {/* Shading overlay */}
+                  <circle cx="250" cy="250" r="235" fill="url(#earthShading)" />
+                </g>
+              </svg>
+            </div>
+          )}
+
+          {/* ================= 3D PLANET MOON ================= */}
+          {moonOpacity > 0 && (
+            <div
+              className="absolute pointer-events-none"
+              style={{
+                left: '50%',
+                top: '50%',
+                transformStyle: 'preserve-3d',
+                transform: `translate3d(calc(-50% + ${moonX}px), calc(-50% + ${moonY}px), ${moonZ}px) rotateY(${-scrollProgress * 15}deg)`,
+                opacity: moonOpacity,
+                willChange: 'transform, opacity',
+              }}
+            >
+              {/* Moon SVG (HD detailed) */}
+              <svg viewBox="0 0 500 500" className="w-[400px] h-[400px] drop-shadow-[0_0_70px_rgba(241,245,249,0.15)]">
+                <defs>
+                  {/* Moon Halo glow */}
+                  <radialGradient id="moonGlow" cx="50%" cy="50%" r="50%">
+                    <stop offset="85%" stopColor="rgba(226, 232, 240, 0)" />
+                    <stop offset="94%" stopColor="rgba(226, 232, 240, 0.12)" />
+                    <stop offset="100%" stopColor="rgba(255, 255, 255, 0.25)" />
+                  </radialGradient>
+                  {/* Moon shading */}
+                  <radialGradient id="moonShading" cx="30%" cy="30%" r="70%">
+                    <stop offset="0%" stopColor="rgba(255, 255, 255, 0.08)" />
+                    <stop offset="55%" stopColor="rgba(0, 0, 0, 0.5)" />
+                    <stop offset="94%" stopColor="rgba(0, 0, 0, 0.98)" />
+                    <stop offset="100%" stopColor="rgba(0, 0, 0, 1)" />
+                  </radialGradient>
+                  <radialGradient id="moonBase" cx="30%" cy="30%" r="70%">
+                    <stop offset="0%" stopColor="#f8fafc" />
+                    <stop offset="100%" stopColor="#cbd5e1" />
+                  </radialGradient>
+                  <mask id="moonMask">
+                    <circle cx="250" cy="250" r="235" fill="white" />
+                  </mask>
+                </defs>
+
+                {/* Glow ring */}
+                <circle cx="250" cy="250" r="245" fill="url(#moonGlow)" />
+
+                {/* Sphere core */}
+                <g mask="url(#moonMask)">
+                  <circle cx="250" cy="250" r="235" fill="url(#moonBase)" />
+
+                  {/* Dark Plains (Maria) */}
+                  <g fill="#64748b" opacity="0.4">
+                    <path d="M120,130 Q160,110 210,130 T280,180 T240,240 T150,220 Z" />
+                    <path d="M290,120 Q330,100 370,140 T360,220 T280,210 Z" />
+                    <path d="M180,260 Q220,290 280,280 T350,320 T260,380 T160,330 Z" />
+                    <path d="M110,230 Q90,260 120,300 T170,280 Z" />
+                  </g>
+
+                  {/* HD craters details */}
+                  <g opacity="0.65">
+                    {/* Tycho Crater */}
+                    <circle cx="250" cy="380" r="16" fill="#cbd5e1" stroke="#475569" strokeWidth="2.5" />
+                    <circle cx="250" cy="380" r="5" fill="#f8fafc" />
+                    <path d="M250,380 L230,445 M250,380 L270,445 M250,380 L200,360 M250,380 L300,360 M250,380 L170,410 M250,380 L330,410 M250,380 L250,230 M250,380 L210,290 M250,380 L290,290" stroke="#f8fafc" strokeWidth="1.2" opacity="0.35" />
+
+                    {/* Copernicus Crater */}
+                    <circle cx="180" cy="210" r="13" fill="#cbd5e1" stroke="#475569" strokeWidth="2" />
+                    <circle cx="180" cy="210" r="4" fill="#f8fafc" />
+
+                    {/* Kepler Crater */}
+                    <circle cx="140" cy="230" r="8" fill="#94a3b8" stroke="#475569" strokeWidth="1" />
+
+                    {/* Plato Crater */}
+                    <ellipse cx="230" cy="90" rx="14" ry="8" fill="#475569" stroke="#475569" strokeWidth="1.5" />
+
+                    {/* Additional small craters */}
+                    <circle cx="310" cy="150" r="7" fill="#cbd5e1" stroke="#475569" />
+                    <circle cx="340" cy="250" r="9" fill="#cbd5e1" stroke="#475569" />
+                    <circle cx="210" cy="150" r="6" fill="#cbd5e1" stroke="#475569" />
+                    <circle cx="270" cy="240" r="9" fill="#cbd5e1" stroke="#475569" />
+                  </g>
+
+                  {/* Spherical Shadow overlay */}
+                  <circle cx="250" cy="250" r="235" fill="url(#moonShading)" />
+                </g>
+              </svg>
+            </div>
+          )}
+
         </div>
-
-        {/* ================= DYNAMIC HD PLANET EARTH ================= */}
-        {earthOpacity > 0 && (
-          <div 
-            className="absolute inset-0 flex items-center justify-center"
-            style={{
-              transform: `scale(${earthScale})`,
-              opacity: earthOpacity,
-              willChange: 'transform, opacity',
-            }}
-          >
-            {/* HD Earth Graphic */}
-            <svg viewBox="0 0 500 500" className="w-[320px] h-[320px] drop-shadow-[0_0_50px_rgba(59,130,246,0.35)]">
-              <defs>
-                {/* Spherical Shadow overlay */}
-                <radialGradient id="earthShading" cx="30%" cy="30%" r="70%">
-                  <stop offset="0%" stopColor="rgba(255, 255, 255, 0.15)" />
-                  <stop offset="50%" stopColor="rgba(0, 0, 0, 0.4)" />
-                  <stop offset="90%" stopColor="rgba(0, 0, 0, 0.95)" />
-                  <stop offset="100%" stopColor="rgba(0, 0, 0, 1)" />
-                </radialGradient>
-                {/* Atmospheric edge glow */}
-                <radialGradient id="atmosphereGlow" cx="50%" cy="50%" r="50%">
-                  <stop offset="90%" stopColor="#1e3a8a" stopOpacity="0" />
-                  <stop offset="96%" stopColor="#3b82f6" stopOpacity="0.8" />
-                  <stop offset="100%" stopColor="#60a5fa" stopOpacity="1" />
-                </radialGradient>
-                {/* Ocean and base colors */}
-                <radialGradient id="oceanGrad" cx="30%" cy="30%" r="70%">
-                  <stop offset="0%" stopColor="#2563eb" />
-                  <stop offset="100%" stopColor="#1d4ed8" />
-                </radialGradient>
-                {/* Earth Mask */}
-                <mask id="sphereMask">
-                  <circle cx="250" cy="250" r="235" fill="white" />
-                </mask>
-              </defs>
-
-              {/* Atmosphere outer ring */}
-              <circle cx="250" cy="250" r="248" fill="url(#atmosphereGlow)" />
-
-              {/* Masked Earth Sphere */}
-              <g mask="url(#sphereMask)">
-                {/* Ocean base */}
-                <circle cx="250" cy="250" r="235" fill="url(#oceanGrad)" />
-
-                {/* Landmass Vectors (HD continents stylized) */}
-                <g fill="#15803d" opacity="0.9">
-                  {/* North & South Americas */}
-                  <path d="M120,80 Q100,100 110,140 T150,180 T170,260 T200,320 T210,400 T190,440 L210,460 L230,420 L220,380 L230,320 L210,280 L200,240 Q220,200 230,160 Q210,130 180,100 Z" />
-                  {/* Africa, Europe, Asia */}
-                  <path d="M300,100 Q280,120 270,160 T300,240 T360,280 T380,340 L410,320 L400,280 L440,240 Q450,180 420,130 Q380,80 320,80 Z" />
-                  <path d="M260,60 Q280,40 340,30 L380,40 L400,70 L340,90 Z" />
-                  {/* Australia */}
-                  <path d="M390,360 Q420,370 430,400 L410,420 L370,400 Z" />
-                  {/* Greenland / Ice */}
-                  <path d="M210,15 Q240,10 260,20 L250,50 L200,40 Z" fill="#e2e8f0" />
-                </g>
-
-                {/* Swirling Dynamic Clouds (With CSS rotation) */}
-                <g className="animate-spin" style={{ transformOrigin: '250px 250px', animationDuration: '90s' }}>
-                  <path d="M80,100 Q150,80 220,110 T320,100 T420,130" fill="none" stroke="white" strokeWidth="15" strokeLinecap="round" opacity="0.35" />
-                  <path d="M120,200 Q200,250 280,200 T400,220" fill="none" stroke="white" strokeWidth="20" strokeLinecap="round" opacity="0.4" />
-                  <path d="M90,320 Q160,280 250,330 T390,300" fill="none" stroke="white" strokeWidth="12" strokeLinecap="round" opacity="0.35" />
-                </g>
-                <g className="animate-spin" style={{ transformOrigin: '250px 250px', animationDuration: '60s', animationDirection: 'reverse' }}>
-                  <path d="M140,150 Q220,120 300,160 T420,180" fill="none" stroke="white" strokeWidth="10" strokeLinecap="round" opacity="0.3" />
-                  <path d="M60,260 Q180,310 280,270 T440,290" fill="none" stroke="white" strokeWidth="16" strokeLinecap="round" opacity="0.35" />
-                </g>
-
-                {/* 3D Sphere Shading overlay */}
-                <circle cx="250" cy="250" r="235" fill="url(#earthShading)" />
-              </g>
-            </svg>
-          </div>
-        )}
-
-        {/* ================= DYNAMIC HD MOON APPROACH ================= */}
-        {moonOpacity > 0 && (
-          <div 
-            className="absolute inset-0 flex items-center justify-center"
-            style={{
-              transform: `scale(${moonScale})`,
-              opacity: moonOpacity,
-              willChange: 'transform, opacity',
-            }}
-          >
-            {/* HD Moon Graphic */}
-            <svg viewBox="0 0 500 500" className="w-[300px] h-[300px] drop-shadow-[0_0_60px_rgba(255,255,255,0.18)]">
-              <defs>
-                {/* 3D Spherical Shadow overlay */}
-                <radialGradient id="moonShading" cx="30%" cy="30%" r="70%">
-                  <stop offset="0%" stopColor="rgba(255, 255, 255, 0.08)" />
-                  <stop offset="60%" stopColor="rgba(0, 0, 0, 0.45)" />
-                  <stop offset="95%" stopColor="rgba(0, 0, 0, 0.95)" />
-                  <stop offset="100%" stopColor="rgba(0, 0, 0, 1)" />
-                </radialGradient>
-                {/* Eerie Moon Halo */}
-                <radialGradient id="moonHalo" cx="50%" cy="50%" r="50%">
-                  <stop offset="85%" stopColor="rgba(226, 232, 240, 0)" />
-                  <stop offset="95%" stopColor="rgba(226, 232, 240, 0.15)" />
-                  <stop offset="100%" stopColor="rgba(255, 255, 255, 0.28)" />
-                </radialGradient>
-                {/* Moon Base Color */}
-                <radialGradient id="moonBase" cx="30%" cy="30%" r="70%">
-                  <stop offset="0%" stopColor="#f1f5f9" />
-                  <stop offset="100%" stopColor="#94a3b8" />
-                </radialGradient>
-                {/* Moon Mask */}
-                <mask id="moonMask">
-                  <circle cx="250" cy="250" r="235" fill="white" />
-                </mask>
-              </defs>
-
-              {/* Outer soft halo */}
-              <circle cx="250" cy="250" r="245" fill="url(#moonHalo)" />
-
-              {/* Masked Moon Sphere */}
-              <g mask="url(#moonMask)">
-                {/* Base sphere */}
-                <circle cx="250" cy="250" r="235" fill="url(#moonBase)" />
-
-                {/* Mare (dark plains) vectors */}
-                <g fill="#475569" opacity="0.45">
-                  <path d="M120,130 Q160,110 210,130 T280,180 T240,240 T150,220 Z" />
-                  <path d="M290,120 Q330,100 370,140 T360,220 T280,210 Z" />
-                  <path d="M180,260 Q220,290 280,280 T350,320 T260,380 T160,330 Z" />
-                  <path d="M110,230 Q90,260 120,300 T170,280 Z" />
-                </g>
-
-                {/* Detailed craters with bright highlights and dark shadows */}
-                <g opacity="0.6">
-                  {/* Tycho crater */}
-                  <circle cx="250" cy="380" r="16" fill="#cbd5e1" stroke="#334155" strokeWidth="2" />
-                  <circle cx="250" cy="380" r="6" fill="#f1f5f9" />
-                  {/* Rays from Tycho */}
-                  <path d="M250,380 L230,440 M250,380 L270,440 M250,380 L200,360 M250,380 L300,360 M250,380 L180,410 M250,380 L320,410 M250,380 L250,250 M250,380 L220,300 M250,380 L280,300" stroke="#f1f5f9" strokeWidth="1" opacity="0.4" />
-
-                  {/* Copernicus crater */}
-                  <circle cx="180" cy="210" r="14" fill="#cbd5e1" stroke="#334155" strokeWidth="1.5" />
-                  <circle cx="180" cy="210" r="5" fill="#e2e8f0" />
-
-                  {/* Kepler crater */}
-                  <circle cx="140" cy="230" r="9" fill="#94a3b8" stroke="#334155" strokeWidth="1" />
-
-                  {/* Plato crater */}
-                  <ellipse cx="230" cy="90" rx="15" ry="9" fill="#475569" stroke="#334155" strokeWidth="1.5" />
-
-                  {/* Various small random craters */}
-                  <circle cx="310" cy="150" r="8" fill="#cbd5e1" stroke="#334155" />
-                  <circle cx="340" cy="250" r="11" fill="#cbd5e1" stroke="#334155" />
-                  <circle cx="330" cy="270" r="6" fill="#cbd5e1" stroke="#334155" />
-                  <circle cx="210" cy="150" r="7" fill="#cbd5e1" stroke="#334155" />
-                  <circle cx="270" cy="240" r="10" fill="#94a3b8" stroke="#334155" />
-                </g>
-
-                {/* 3D Sphere Shading overlay */}
-                <circle cx="250" cy="250" r="235" fill="url(#moonShading)" />
-              </g>
-            </svg>
-          </div>
-        )}
       </div>
 
       {/* ================= FIXED HEADER ================= */}
-      <header className="fixed top-0 left-0 w-full p-6 md:p-8 flex items-center justify-between z-40 select-none pointer-events-none">
+      <header className="fixed top-0 left-0 w-full p-6 md:p-8 flex items-center justify-between z-45 select-none pointer-events-none">
         <div className="flex flex-col text-left pointer-events-auto cursor-pointer" onClick={() => handleSectionJump(0)}>
           <span className="text-[20px] font-black tracking-[0.16em] text-white uppercase font-sans">
             IGLOO
@@ -366,37 +444,37 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
         </div>
 
         <div className="hidden md:flex items-center gap-6 text-[10px] font-bold tracking-widest text-slate-400 uppercase font-mono pointer-events-auto">
-          <button onClick={() => handleSectionJump(0)} className={`hover:text-white transition-colors cursor-pointer ${activeSection === 0 ? 'text-sky-400' : ''}`}>01 / ORBIT</button>
-          <button onClick={() => handleSectionJump(1)} className={`hover:text-white transition-colors cursor-pointer ${activeSection === 1 ? 'text-sky-400' : ''}`}>02 / DESCENT</button>
-          <button onClick={() => handleSectionJump(2)} className={`hover:text-white transition-colors cursor-pointer ${activeSection === 2 ? 'text-sky-400' : ''}`}>03 / INGRESS</button>
+          <button onClick={() => handleSectionJump(0)} className={`hover:text-white transition-colors cursor-pointer ${activeSection === 0 ? 'text-sky-400' : ''}`}>01 / DEPARTURE</button>
+          <button onClick={() => handleSectionJump(1)} className={`hover:text-white transition-colors cursor-pointer ${activeSection === 1 ? 'text-sky-400' : ''}`}>02 / WARP SPEED</button>
+          <button onClick={() => handleSectionJump(2)} className={`hover:text-white transition-colors cursor-pointer ${activeSection === 2 ? 'text-sky-400' : ''}`}>03 / APPROACH</button>
         </div>
 
         <div className="flex items-center gap-2 pointer-events-auto">
           <div className="px-3 py-1 bg-slate-950/80 border border-slate-800 rounded-full text-[9px] font-black text-sky-400 tracking-wider flex items-center gap-1.5 shadow-md">
             <Shield size={10} className="animate-pulse" />
-            <span>SECURE INGRESS ACTIVE</span>
+            <span>SECURE INGRESS GATEWAY</span>
           </div>
         </div>
       </header>
 
-      {/* ================= ATMOSPHERIC SIDEBAR TELEMETRY ================= */}
+      {/* ================= FLIGHT TELEMETRY readouts ================= */}
       <div className="fixed left-6 md:left-8 bottom-8 z-30 select-none font-mono text-[9px] text-slate-500 tracking-widest hidden md:flex flex-col gap-1.5 leading-none pointer-events-none text-left">
         <div className="flex items-center gap-1.5">
           <Compass size={11} className="text-sky-500" />
           <span>ALTITUDE: {currentAltitude.toLocaleString()} KM</span>
         </div>
-        <div>VELOCITY: {Math.floor(12.6 * (1 + scrollProgress * 3))} KM/S</div>
+        <div>VELOCITY: {Math.floor(11.2 * (1 + scrollProgress * 5 + velocity * 200))} KM/S</div>
+        <div>PROPULSION: {velocity > 0.005 ? 'HYPERDRIVE ACTIVE' : 'STEADY ORBIT'}</div>
         <div>SYS STATUS: STABLE</div>
-        <div>STAGE: {activeSection === 3 ? 'LANDING COMPLETE' : `APPROACH 0${activeSection + 1}`}</div>
       </div>
 
-      {/* ================= VERTICAL STAGE SCROLL INDICATORS ================= */}
+      {/* ================= RIGHT SCROLL DOT STAGE LINKERS ================= */}
       <div className="fixed right-6 md:right-8 top-1/2 -translate-y-1/2 z-40 hidden md:flex flex-col gap-6 select-none text-right font-mono text-[9px] pointer-events-auto">
         {[
-          { num: '01', label: 'EARTH ORBIT' },
-          { num: '02', label: 'LUNAR DESCENT' },
+          { num: '01', label: 'EARTH DEPARTURE' },
+          { num: '02', label: 'SPACE FLIGHT' },
           { num: '03', label: 'LUNAR APPROACH' },
-          { num: '04', label: 'INGRESS GATE' }
+          { num: '04', label: 'MOON LANDING' }
         ].map((sec, idx) => {
           const isActive = activeSection === idx;
           return (
@@ -415,7 +493,7 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
         })}
       </div>
 
-      {/* ================= FLOATING SCROLL INDICATOR ================= */}
+      {/* ================= DOWNWARDS SCROLL INDICATOR ================= */}
       <AnimatePresence>
         {scrollProgress < 0.85 && (
           <motion.div 
@@ -425,13 +503,13 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
             transition={{ repeat: Infinity, duration: 1.8 }}
             className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-1 font-mono text-[9px] text-slate-400 tracking-[0.3em] pointer-events-none uppercase"
           >
-            <span>SCROLL TO DESCEND</span>
+            <span>SCROLL TO LAUNCH</span>
             <ChevronDown size={14} className="text-sky-400" />
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ================= SCROLL NARRATIVE LABELS ================= */}
+      {/* ================= CINEMATIC STAGE OVERLAYS ================= */}
       <div className="fixed inset-0 pointer-events-none z-20 flex items-center justify-center">
         <AnimatePresence mode="wait">
           {activeSection === 0 && (
@@ -444,13 +522,13 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
               className="text-center space-y-3 px-6 max-w-lg select-none"
             >
               <span className="text-[10px] font-black text-sky-400 tracking-[0.5em] uppercase font-mono block">
-                STAGE 01 // DEPARTURE
+                STAGE 01 // ORBIT BYPASS
               </span>
               <h2 className="text-3xl md:text-5xl font-black uppercase tracking-tight text-white leading-none">
-                EARTH ORBIT
+                EARTH DEPARTURE
               </h2>
               <p className="text-xs text-slate-400 leading-relaxed font-semibold">
-                Departing low Earth orbit. Prepare for Trans-Lunar Injection. Scroll down to accelerate and enter the deep space void.
+                Starting from low Earth orbit. Scroll down to zoom out from the Earth's surface and initiate the hyperdrive ignition sequence.
               </p>
             </motion.div>
           )}
@@ -465,13 +543,13 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
               className="text-center space-y-3 px-6 max-w-lg select-none"
             >
               <span className="text-[10px] font-black text-sky-400 tracking-[0.5em] uppercase font-mono block">
-                STAGE 02 // DEEP SPACE VOID
+                STAGE 02 // SPEED INTERCEPT
               </span>
               <h2 className="text-3xl md:text-5xl font-black uppercase tracking-tight text-white leading-none">
-                LUNAR DESCENT
+                HYPERDRIVE ACTIVE
               </h2>
-              <p className="text-xs text-slate-400 leading-relaxed font-semibold">
-                Navigating the space void. Gravitational pull shifting to the lunar core. The Lunar horizon is now visible in the distance.
+              <p className="text-xs text-slate-400 leading-relaxed font-semibold font-mono">
+                Warp drive active. Stars stretch into speed lines based on your scroll velocity. Earth falls behind as we race towards the Moon.
               </p>
             </motion.div>
           )}
@@ -486,31 +564,31 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
               className="text-center space-y-3 px-6 max-w-lg select-none"
             >
               <span className="text-[10px] font-black text-sky-400 tracking-[0.5em] uppercase font-mono block">
-                STAGE 03 // LUNAR APPROACH
+                STAGE 03 // GRAVITY ASSIST
               </span>
               <h2 className="text-3xl md:text-5xl font-black uppercase tracking-tight text-white leading-none">
-                FINAL APPROACH
+                LUNAR INTERCEPT
               </h2>
               <p className="text-xs text-slate-400 leading-relaxed font-semibold">
-                Entering low lunar orbit. Commencing landing sequence. Secure corporate decryptor protocols are initializing.
+                Approaching the Moon. Decelerating to orbital speeds. Preparing to descend onto the lunar landscape.
               </p>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
-      {/* ================= LOGIN FORM (Unblurs in Stage 4) ================= */}
+      {/* ================= THE FINAL LUNAR LANDING LOGIN GATE ================= */}
       <AnimatePresence>
         {scrollProgress >= 0.75 && (() => {
           const progressRatio = Math.max(0, Math.min(1, (scrollProgress - 0.75) / 0.15)); // 0 to 1
           const blurAmount = Math.max(0, 20 - progressRatio * 20);
           const opacityAmount = progressRatio;
-          const scaleAmount = 0.94 + progressRatio * 0.06;
+          const scaleAmount = 0.93 + progressRatio * 0.07;
           const isInteractive = scrollProgress >= 0.85;
 
           return (
             <div 
-              className={`fixed inset-0 z-30 flex items-center justify-center p-6 bg-slate-950/20 backdrop-blur-[2px] transition-all duration-300 ${isInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`}
+              className={`fixed inset-0 z-30 flex items-center justify-center p-6 bg-slate-950/15 backdrop-blur-[2px] transition-all duration-300 ${isInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`}
               style={{
                 filter: `blur(${blurAmount}px)`,
                 opacity: opacityAmount,
@@ -520,20 +598,20 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
                 style={{
                   transform: `scale(${scaleAmount})`,
                 }}
-                className="w-full max-w-md bg-slate-900/80 border-2 border-slate-800/85 p-8 rounded-[32px] shadow-[0_0_80px_rgba(0,0,0,0.85)] text-center flex flex-col space-y-5 select-none backdrop-blur-md"
+                className="w-full max-w-md bg-slate-950/80 border-2 border-slate-800/80 p-8 rounded-[32px] shadow-[0_0_80px_rgba(0,0,0,0.85)] text-center flex flex-col space-y-5 select-none backdrop-blur-md"
               >
-                {/* Top decorative bar */}
+                {/* Visual bar detail */}
                 <div className="w-16 h-1 bg-gradient-to-r from-slate-700 via-slate-500 to-slate-700 rounded-full mx-auto" />
 
-                <div className="mx-auto w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-400/30 flex items-center justify-center text-indigo-400 animate-pulse">
+                <div className="mx-auto w-12 h-12 rounded-2xl bg-sky-500/10 border border-sky-400/30 flex items-center justify-center text-sky-400 animate-pulse">
                   <Lock size={20} />
                 </div>
 
                 <div className="space-y-1">
-                  <span className="text-[9px] font-black tracking-[0.3em] text-sky-400 uppercase font-mono block">STAGE 04 // BIOMETRIC BYPASS</span>
-                  <h3 className="text-xl font-extrabold uppercase tracking-tight text-white">Authorized Ingress</h3>
+                  <span className="text-[9px] font-black tracking-[0.3em] text-sky-400 uppercase font-mono block">STAGE 04 // MOON SURFACE LANDING</span>
+                  <h3 className="text-xl font-extrabold uppercase tracking-tight text-white">Secure Ingress Decoded</h3>
                   <p className="text-xs text-slate-400 leading-relaxed max-w-[280px] mx-auto font-medium">
-                    Please authenticate with your corporate credentials to access the Chat Igloo Playground.
+                    You have successfully landed on the Moon's surface. Sign in to bypass the gate and enter the playground.
                   </p>
                 </div>
 
@@ -546,14 +624,14 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
                   )}
 
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">Email Address</label>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">Corporate Email</label>
                     <input
                       type="email"
                       required
                       value={localEmail}
                       onChange={(e) => setLocalEmail(e.target.value)}
                       placeholder="you@company.com"
-                      className="w-full text-xs font-medium bg-slate-950/60 border border-slate-800 rounded-xl px-4 py-3 focus:bg-slate-950 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all text-slate-100 select-text font-sans"
+                      className="w-full text-xs font-medium bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 focus:bg-slate-950 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none transition-all text-slate-100 select-text font-sans"
                     />
                   </div>
 
@@ -566,7 +644,7 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
                         value={localPassword}
                         onChange={(e) => setLocalPassword(e.target.value)}
                         placeholder="••••••••"
-                        className="w-full text-xs font-medium bg-slate-950/60 border border-slate-800 rounded-xl px-4 py-3 focus:bg-slate-950 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all text-slate-100 select-text font-sans"
+                        className="w-full text-xs font-medium bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 focus:bg-slate-950 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none transition-all text-slate-100 select-text font-sans"
                       />
                       <button
                         type="button"
@@ -586,7 +664,7 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
                     {warpActive ? (
                       <>
                         <RefreshCw size={13} className="animate-spin" />
-                        <span>DECRYPTING KEYS...</span>
+                        <span>DECRYPTING BIOMETRICS...</span>
                       </>
                     ) : (
                       <>
@@ -599,7 +677,7 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
 
                 <div className="mt-1 flex items-center justify-center gap-1 text-[9px] text-slate-500 tracking-wider font-mono uppercase">
                   <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                  <span>SECURE QUANTUM COMMS ACTIVE</span>
+                  <span>RESTRICTED LUNAR TRANSMISSION ACTIVE</span>
                 </div>
               </motion.div>
             </div>
@@ -607,7 +685,7 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
         })()}
       </AnimatePresence>
 
-      {/* Extreme supersonic transition warp overlay */}
+      {/* Supra-light speed warp transition effect on successful bypass */}
       <AnimatePresence>
         {warpActive && (
           <motion.div
@@ -624,7 +702,7 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
               transition={{ duration: 0.8 }}
               className="text-white text-center font-sans tracking-[0.5em] uppercase font-black"
             >
-              INGRESS COMPLETE
+              INGRESS BYPASS COMPLETE
             </motion.div>
           </motion.div>
         )}
