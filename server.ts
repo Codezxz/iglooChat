@@ -13,7 +13,7 @@ const resolvedDirname = typeof __dirname !== 'undefined'
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT || 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   // Mount API router FIRST
   app.use('/api', apiRouter);

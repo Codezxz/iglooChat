@@ -130,6 +130,20 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
     });
   };
 
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setLocalError(null);
+    const success = onVerifyLogin(localEmail, localPassword);
+    if (success) {
+      setWarpActive(true);
+      setTimeout(() => {
+        onUnlock(localEmail);
+      }, 1200);
+    } else {
+      setLocalError('Invalid email or password. Access is restricted to authorized accounts.');
+    }
+  };
+
   // Define BTS Member profiles with names, roles, bios, and stylized HD SVGs
   const btsMembers: MemberProfile[] = [
     {
@@ -288,7 +302,9 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
   // Member stations are placed at Z: 0, -500, -1000, -1500, -2000, -2500, -3000
   // Moon is at Z: -3600
   const maxZFlight = -3500;
+  const moonZ = -3500;
   const cameraZ = 450 + scrollProgress * (maxZFlight - 450);
+  const currentAltitude = Math.max(0, Math.floor(384400 * (1 - scrollProgress)));
 
   // Slight camera yaw/pitch pan to make the fly-by feel curved and three-dimensional
   const localCurveRatio = (scrollProgress * Math.PI * 4); 
