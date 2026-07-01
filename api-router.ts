@@ -23,7 +23,7 @@ function getAiClient(apiKeyOverride?: string): GoogleGenAI {
     });
   }
   if (!aiClient) {
-    const apiKey = process.env.GEMINI_API_KEY || 'AQ.Ab8RN6J5Nnog2PkYMpWFrSSHuANUXQcpDXD-rjfiJv_3yjPBSQ';
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       throw new Error('GEMINI_API_KEY is missing. Please add it to the Secrets panel in Settings.');
     }
