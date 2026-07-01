@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Shield, ChevronDown, Compass, Lock, Eye, EyeOff, AlertTriangle, ArrowRight, RefreshCw, Star } from 'lucide-react';
+import { Shield, ChevronDown, Compass, Lock, Eye, EyeOff, AlertTriangle, ArrowRight, RefreshCw } from 'lucide-react';
 
 interface ChemistryLandingProps {
   onUnlock: (email: string) => void;
@@ -50,6 +50,9 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
   const [velocity, setVelocity] = useState(0);
   const lastProgress = useRef(0);
   const velocityRef = useRef(0);
+
+  // Image load error tracking for fallback silhouettes
+  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
 
   // 3D Starfield list
   const [stars, setStars] = useState<Star3D[]>([]);
@@ -158,11 +161,9 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
       svgIcon: (
         <svg viewBox="0 0 100 100" className="w-full h-full text-sky-400 drop-shadow-[0_0_20px_rgba(56,189,248,0.6)] animate-pulse">
           <circle cx="50" cy="50" r="38" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 4" />
-          {/* Headphones */}
           <path d="M28,50 C28,34 38,24 50,24 C62,24 72,34 72,50" fill="none" stroke="currentColor" strokeWidth="3" />
           <rect x="23" y="46" width="10" height="12" rx="4" fill="currentColor" />
           <rect x="67" y="46" width="10" height="12" rx="4" fill="currentColor" />
-          {/* Glowing central star */}
           <path d="M50,42 L52,48 L58,48 L53,52 L55,58 L50,54 L45,58 L47,52 L42,48 L48,48 Z" fill="currentColor" />
         </svg>
       )
@@ -178,10 +179,8 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
       gradient: 'radial-gradient(circle at 70% 30%, rgba(236,72,153,0.18) 0%, rgba(3,7,18,0) 70%)',
       svgIcon: (
         <svg viewBox="0 0 100 100" className="w-full h-full text-pink-400 drop-shadow-[0_0_20px_rgba(236,72,153,0.6)] animate-spin" style={{ animationDuration: '20s' }}>
-          {/* Astronaut Planet */}
           <circle cx="50" cy="50" r="22" fill="none" stroke="currentColor" strokeWidth="2.5" />
           <ellipse cx="50" cy="50" rx="38" ry="8" fill="none" stroke="currentColor" strokeWidth="2" transform="rotate(-20 50 50)" />
-          {/* Small orbiting moon */}
           <circle cx="20" cy="35" r="4" fill="currentColor" />
           <circle cx="80" cy="65" r="3" fill="currentColor" />
         </svg>
@@ -198,13 +197,11 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
       gradient: 'radial-gradient(circle at 30% 70%, rgba(249,115,22,0.18) 0%, rgba(3,7,18,0) 70%)',
       svgIcon: (
         <svg viewBox="0 0 100 100" className="w-full h-full text-orange-400 drop-shadow-[0_0_20px_rgba(249,115,22,0.6)]">
-          {/* Piano keys & fire */}
           <path d="M25,65 L75,65 L75,75 L25,75 Z" fill="none" stroke="currentColor" strokeWidth="2" />
           <line x1="35" y1="65" x2="35" y2="75" stroke="currentColor" strokeWidth="2" />
           <line x1="45" y1="65" x2="45" y2="75" stroke="currentColor" strokeWidth="2" />
           <line x1="55" y1="65" x2="55" y2="75" stroke="currentColor" strokeWidth="2" />
           <line x1="65" y1="65" x2="65" y2="75" stroke="currentColor" strokeWidth="2" />
-          {/* Burning Flame */}
           <path d="M50,15 C55,30 65,38 60,55 C55,50 48,46 48,38 C42,46 32,50 40,58 C30,48 42,32 50,15 Z" fill="currentColor" />
         </svg>
       )
@@ -220,7 +217,6 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
       gradient: 'radial-gradient(circle at 70% 70%, rgba(234,179,8,0.18) 0%, rgba(3,7,18,0) 70%)',
       svgIcon: (
         <svg viewBox="0 0 100 100" className="w-full h-full text-yellow-400 drop-shadow-[0_0_20px_rgba(234,179,8,0.6)] animate-pulse">
-          {/* Radiant Sun/Hope emblem */}
           <circle cx="50" cy="50" r="18" fill="none" stroke="currentColor" strokeWidth="2.5" />
           {[0, 45, 90, 135, 180, 225, 270, 315].map((angle) => (
             <line
@@ -233,7 +229,6 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
               strokeLinecap="round"
             />
           ))}
-          {/* Central smile motif */}
           <path d="M43,48 Q45,45 47,48" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           <path d="M53,48 Q55,45 57,48" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           <path d="M42,54 Q50,60 58,54" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -251,7 +246,6 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
       gradient: 'radial-gradient(circle at 30% 20%, rgba(168,85,247,0.18) 0%, rgba(3,7,18,0) 70%)',
       svgIcon: (
         <svg viewBox="0 0 100 100" className="w-full h-full text-purple-400 drop-shadow-[0_0_20px_rgba(168,85,247,0.6)]">
-          {/* Crescent Moon & Feather */}
           <path d="M35,25 C48,25 58,35 58,48 C58,61 48,71 35,71 C45,71 52,61 52,48 C52,35 45,25 35,25 Z" fill="currentColor" />
           <path d="M45,45 Q62,35 70,55 Q60,52 50,55" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
           <line x1="45" y1="45" x2="40" y2="40" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -269,7 +263,6 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
       gradient: 'radial-gradient(circle at 70% 80%, rgba(16,185,129,0.18) 0%, rgba(3,7,18,0) 70%)',
       svgIcon: (
         <svg viewBox="0 0 100 100" className="w-full h-full text-emerald-400 drop-shadow-[0_0_20px_rgba(16,185,129,0.6)]">
-          {/* Retro Film Camera */}
           <rect x="25" y="36" width="50" height="32" rx="4" fill="none" stroke="currentColor" strokeWidth="2.5" />
           <path d="M38,36 L43,30 L57,30 L62,36 Z" fill="none" stroke="currentColor" strokeWidth="2.5" />
           <circle cx="50" cy="52" r="11" fill="none" stroke="currentColor" strokeWidth="2.5" />
@@ -288,7 +281,6 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
       gradient: 'radial-gradient(circle at 50% 50%, rgba(244,63,94,0.18) 0%, rgba(3,7,18,0) 70%)',
       svgIcon: (
         <svg viewBox="0 0 100 100" className="w-full h-full text-rose-400 drop-shadow-[0_0_20px_rgba(244,63,94,0.6)] animate-pulse">
-          {/* Golden Microphone & Crown */}
           <path d="M44,48 L56,48 L53,74 L47,74 Z" fill="none" stroke="currentColor" strokeWidth="2" />
           <rect x="42" y="32" width="16" height="16" rx="8" fill="currentColor" />
           <path d="M34,22 L40,28 L50,20 L60,28 L66,22 L62,32 L38,32 Z" fill="currentColor" />
@@ -298,9 +290,7 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
   ];
 
   // ================= 3D CAMERA & MEMBER FLY-BY CALCULATIONS =================
-  // Camera Z translation moves through the coordinate stack from 400px down to -3800px
-  // Member stations are placed at Z: 0, -500, -1000, -1500, -2000, -2500, -3000
-  // Moon is at Z: -3600
+  // Camera Z translation moves through the coordinate stack from 450px down to -3500px
   const maxZFlight = -3500;
   const moonZ = -3500;
   const cameraZ = 450 + scrollProgress * (maxZFlight - 450);
@@ -329,10 +319,9 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
 
         {/* Dynamic Color-shifting Background Nebulas */}
         {btsMembers.map((m, idx) => {
-          // Calculate active opacity matching the scroll range of the member
-          const centerRatio = (idx + 0.5) / 8; // center scroll position for stage
+          const centerRatio = (idx + 0.5) / 8;
           const distance = Math.abs(scrollProgress - centerRatio);
-          const opacity = Math.max(0, 1 - distance * 7); // peak at center, fade out quickly
+          const opacity = Math.max(0, 1 - distance * 7);
 
           return (
             <div
@@ -389,43 +378,55 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
 
           {/* ================= 3D BTS MEMBERS FLY-BY PAGES ================= */}
           {btsMembers.map((member, idx) => {
-            const memberZ = idx * -500; // stacked at Z: 0, -500, -1000, -1500...
-            
-            // Calculate distance to camera to handle entry / pass-by visibility
-            // We want the card to fly in from the side as we approach, settle in the center, and fly away as we pass
+            const memberZ = idx * -500; 
             const distance = cameraZ - memberZ; // distance in Z pixels
             
             // Opacity curve: fades in as we approach, fades out after we pass
             let opacity = 1.0;
             if (distance > 650) {
-              opacity = 0; // too far ahead
+              opacity = 0;
             } else if (distance > 350) {
-              opacity = (650 - distance) / 300; // fade in approach
-            } else if (distance < -150) {
-              opacity = Math.max(0, (distance + 350) / 200); // fade out pass-by
+              opacity = (650 - distance) / 300;
+            } else if (distance < -250) {
+              opacity = Math.max(0, (distance + 450) / 200);
             }
 
-            // Alternating fly-by coordinate entries (left, right, bottom, top-left...)
+            // Alternating fly-by coordinate entries for the profile card
             let flyX = 0;
             let flyY = 0;
-            
-            const directionRatio = Math.max(0, Math.min(1, (distance - 150) / 400)); // 1 (far ahead/approaching) to 0 (centered)
-            
+            const directionRatio = Math.max(0, Math.min(1, (distance - 150) / 400));
             if (idx % 3 === 0) {
-              // Fly in from Left
               flyX = -directionRatio * 450;
             } else if (idx % 3 === 1) {
-              // Fly in from Right
               flyX = directionRatio * 450;
             } else {
-              // Fly in from Bottom
               flyY = directionRatio * 350;
             }
-
-            // Card tilt / rotation orbit as we approach
             const rotateYVal = (idx % 2 === 0 ? 1 : -1) * (15 * directionRatio);
 
+            // ================= SUPERMAN SPIRAL FLIGHT MATHEMATICS =================
+            // We want the member to spiral dynamically relative to their card.
+            // Approach range: distance goes from 600px to -250px (total span 850px)
+            const localProgress = Math.max(0, Math.min(1, 1 - (distance + 250) / 850));
+            
+            // 3.5 full rotations around the center of the screen
+            const spiralAngle = localProgress * Math.PI * 7; 
+            
+            // Starts small in background, arcs wide, and rushes past camera
+            const spiralRadius = 320 * Math.sin(localProgress * Math.PI);
+            
+            const memberFlyX = Math.cos(spiralAngle) * spiralRadius;
+            const memberFlyY = Math.sin(spiralAngle) * spiralRadius;
+            const memberFlyZ = 45; // placed slightly in front of the card in 3D
+            
+            // Superman banking and rolling rotations
+            const memberRollZ = spiralAngle * (180 / Math.PI) * 0.15; // barrel roll
+            const memberBankY = Math.sin(spiralAngle) * 25; // bank turn left/right
+            const memberPitchX = Math.cos(spiralAngle) * 15; // bank pitch up/down
+
             if (opacity <= 0) return null;
+
+            const imageName = member.stageName.toLowerCase().replace('-', '');
 
             return (
               <div
@@ -435,57 +436,113 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
                   left: '50%',
                   top: '50%',
                   transformStyle: 'preserve-3d',
-                  transform: `translate3d(calc(-50% + ${flyX}px), calc(-50% + ${flyY}px), ${memberZ}px) rotateY(${rotateYVal}deg)`,
+                  transform: `translate3d(0, 0, ${memberZ}px)`,
                   opacity: opacity,
                   willChange: 'transform, opacity',
                 }}
-                className="w-[90%] max-w-xl flex flex-col md:flex-row items-center gap-6 md:gap-10 p-6 md:p-8 rounded-[36px] bg-slate-950/40 border border-slate-800/80 backdrop-blur-xl shadow-[0_0_60px_rgba(0,0,0,0.6)] select-none pointer-events-auto"
+                className="w-full h-full pointer-events-none"
               >
-                {/* 3D Floating Icon wrapper */}
-                <div 
-                  className="w-24 h-24 md:w-32 md:h-32 shrink-0 rounded-3xl bg-slate-950/60 border border-slate-800 flex items-center justify-center p-3 md:p-4 shadow-inner"
+                {/* The Flying Member Avatar (orbits in 3D around the card) */}
+                <div
                   style={{
-                    transform: `translateZ(30px) rotateY(${-rotateYVal * 1.5}deg)`,
+                    position: 'absolute',
+                    left: '50%',
+                    top: '50%',
+                    width: '240px',
+                    height: '240px',
+                    transform: `translate3d(calc(-50% + ${memberFlyX}px), calc(-50% + ${memberFlyY}px), ${memberFlyZ}px) rotateZ(${memberRollZ}deg) rotateY(${memberBankY}deg) rotateX(${memberPitchX}deg)`,
+                    willChange: 'transform',
                   }}
+                  className="pointer-events-none drop-shadow-[0_10px_25px_rgba(0,0,0,0.6)]"
                 >
-                  {member.svgIcon}
+                  {!imageErrors[member.stageName] ? (
+                    <img
+                      src={`/bts/${imageName}.png`}
+                      alt={`${member.stageName} flying`}
+                      onError={() => {
+                        setImageErrors(prev => ({ ...prev, [member.stageName]: true }));
+                      }}
+                      className="w-full h-full object-contain filter drop-shadow-[0_0_15px_rgba(255,255,255,0.25)]"
+                    />
+                  ) : (
+                    // High-quality vector fallback: silhouette of flying Superman in fashion clothes
+                    <div className="w-full h-full flex flex-col items-center justify-center relative bg-slate-950/60 rounded-full border border-slate-800/80 backdrop-blur-md p-4">
+                      {/* Stylized flying superhero avatar */}
+                      <svg viewBox="0 0 100 100" className="w-3/4 h-3/4" style={{ color: member.accentColor }}>
+                        {/* Cape */}
+                        <path d="M35,45 L15,80 L40,65 Z" fill="currentColor" opacity="0.4" />
+                        <path d="M65,45 L85,80 L60,65 Z" fill="currentColor" opacity="0.4" />
+                        {/* Superhero body outline */}
+                        <path d="M50,12 L64,28 L57,48 L64,54 L50,92 L36,54 L43,48 L36,28 Z" fill="currentColor" />
+                        {/* Head/Smile outline */}
+                        <circle cx="50" cy="8" r="6" fill="currentColor" />
+                        {/* Stylish jacket collar lines */}
+                        <path d="M42,28 L50,38 L58,28" stroke="#ffffff" strokeWidth="1.5" fill="none" opacity="0.8" />
+                      </svg>
+                      {/* Member Badge Overlay */}
+                      <span 
+                        style={{ backgroundColor: `${member.accentColor}33`, borderColor: member.accentColor }}
+                        className="absolute bottom-4 px-2 py-0.5 text-[9px] font-black tracking-widest text-white border rounded-full font-mono"
+                      >
+                        {member.stageName}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
-                {/* Profile Information */}
-                <div 
-                  className="flex-1 text-left space-y-3"
+                {/* The Profile Card */}
+                <div
                   style={{
-                    transform: 'translateZ(15px)',
+                    position: 'absolute',
+                    left: '50%',
+                    top: '50%',
+                    transform: `translate3d(calc(-50% + ${flyX}px), calc(-50% + ${flyY}px), 0px) rotateY(${rotateYVal}deg)`,
+                    willChange: 'transform',
                   }}
+                  className="w-[90%] max-w-xl flex flex-col md:flex-row items-center gap-6 md:gap-10 p-6 md:p-8 rounded-[36px] bg-slate-950/45 border border-slate-800/80 backdrop-blur-xl shadow-[0_0_60px_rgba(0,0,0,0.6)] select-none pointer-events-auto"
                 >
-                  <div className="space-y-1">
-                    <span 
-                      style={{ color: member.accentColor }} 
-                      className="text-[9px] font-black uppercase tracking-[0.25em] font-mono block"
-                    >
-                      MEMBER 0{member.id + 1} // BTS PROFILE
-                    </span>
-                    <h2 className="text-3xl font-black text-white uppercase tracking-tight leading-none">
-                      {member.stageName}
-                    </h2>
-                    <p className="text-xs text-slate-400 font-bold">
-                      {member.fullName}
+                  {/* Floating Icon */}
+                  <div 
+                    className="w-20 h-20 md:w-28 md:h-28 shrink-0 rounded-3xl bg-slate-950/60 border border-slate-800 flex items-center justify-center p-3 shadow-inner"
+                    style={{
+                      transform: 'translateZ(20px)',
+                    }}
+                  >
+                    {member.svgIcon}
+                  </div>
+
+                  {/* Profile Info */}
+                  <div className="flex-1 text-left space-y-3" style={{ transform: 'translateZ(10px)' }}>
+                    <div className="space-y-1">
+                      <span 
+                        style={{ color: member.accentColor }} 
+                        className="text-[9px] font-black uppercase tracking-[0.25em] font-mono block"
+                      >
+                        MEMBER 0{member.id + 1} // BTS PROFILE
+                      </span>
+                      <h2 className="text-3xl font-black text-white uppercase tracking-tight leading-none">
+                        {member.stageName}
+                      </h2>
+                      <p className="text-xs text-slate-400 font-bold">
+                        {member.fullName}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 text-[10px] font-mono font-bold uppercase tracking-wider text-slate-350">
+                      <span className="px-2 py-0.5 rounded bg-slate-800/60 border border-slate-800">
+                        {member.position}
+                      </span>
+                      <span className="px-2 py-0.5 rounded bg-slate-800/60 border border-slate-800">
+                        {member.birthday}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-300 leading-relaxed font-semibold">
+                      {member.bio}
                     </p>
                   </div>
-
-                  <div className="flex flex-wrap gap-2 text-[10px] font-mono font-bold uppercase tracking-wider text-slate-300">
-                    <span className="px-2 py-0.5 rounded bg-slate-800/60 border border-slate-800">
-                      {member.position}
-                    </span>
-                    <span className="px-2 py-0.5 rounded bg-slate-800/60 border border-slate-800">
-                      {member.birthday}
-                    </span>
-                  </div>
-
-                  <p className="text-xs text-slate-350 leading-relaxed font-semibold">
-                    {member.bio}
-                  </p>
                 </div>
+
               </div>
             );
           })}
@@ -506,13 +563,11 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
               {/* HD Moon SVG */}
               <svg viewBox="0 0 500 500" className="w-[450px] h-[450px] drop-shadow-[0_0_80px_rgba(241,245,249,0.18)]">
                 <defs>
-                  {/* Moon glow */}
                   <radialGradient id="moonGlow" cx="50%" cy="50%" r="50%">
                     <stop offset="85%" stopColor="rgba(226, 232, 240, 0)" />
                     <stop offset="94%" stopColor="rgba(226, 232, 240, 0.12)" />
                     <stop offset="100%" stopColor="rgba(255, 255, 255, 0.25)" />
                   </radialGradient>
-                  {/* Moon shading */}
                   <radialGradient id="moonShading" cx="30%" cy="30%" r="70%">
                     <stop offset="0%" stopColor="rgba(255, 255, 255, 0.08)" />
                     <stop offset="55%" stopColor="rgba(0, 0, 0, 0.5)" />
@@ -569,14 +624,14 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
         </div>
 
         <div className="hidden md:flex items-center gap-6 text-[10px] font-bold tracking-widest text-slate-400 uppercase font-mono pointer-events-auto">
-          <button onClick={() => handleSectionJump(0)} className={`hover:text-white transition-colors cursor-pointer ${activeSection < 7 ? 'text-sky-400' : ''}`}>01 / BTS MEMBERS</button>
+          <button onClick={() => handleSectionJump(0)} className={`hover:text-white transition-colors cursor-pointer ${activeSection < 7 ? 'text-sky-400' : ''}`}>01 / BTS FLIGHT</button>
           <button onClick={() => handleSectionJump(7)} className={`hover:text-white transition-colors cursor-pointer ${activeSection === 7 ? 'text-sky-400' : ''}`}>02 / LUNAR INGRESS</button>
         </div>
 
         <div className="flex items-center gap-2 pointer-events-auto">
           <div className="px-3 py-1 bg-slate-950/80 border border-slate-800 rounded-full text-[9px] font-black text-sky-400 tracking-wider flex items-center gap-1.5 shadow-md">
             <Shield size={10} className="animate-pulse" />
-            <span>BTS PROFILE ACCESS ONLY</span>
+            <span>SECURE GATEWAY ACTIVE</span>
           </div>
         </div>
       </header>
@@ -588,8 +643,8 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
           <span>ALTITUDE: {currentAltitude.toLocaleString()} KM</span>
         </div>
         <div>VELOCITY: {Math.floor(11.2 * (1 + scrollProgress * 5.5 + velocity * 180))} KM/S</div>
-        <div>PROPULSION: {velocity > 0.005 ? 'HYPERDRIVE ACTIVE' : 'LUNAR GRAVITY'}</div>
         <div>ACTIVE: {activeSection === 7 ? 'MOON GATE' : btsMembers[activeSection]?.stageName || 'RM'}</div>
+        <div>MANEUVER: SPIRAL ORBIT</div>
       </div>
 
       {/* ================= RIGHT SCROLL DOT STAGE LINKERS ================= */}
@@ -664,7 +719,7 @@ export default function ChemistryLanding({ onUnlock, onVerifyLogin, darkMode }: 
       {/* ================= THE FINAL LUNAR LANDING LOGIN GATE ================= */}
       <AnimatePresence>
         {scrollProgress >= 0.80 && (() => {
-          const progressRatio = Math.max(0, Math.min(1, (scrollProgress - 0.80) / 0.18)); // 0 to 1
+          const progressRatio = Math.max(0, Math.min(1, (scrollProgress - 0.80) / 0.18)); 
           const blurAmount = Math.max(0, 20 - progressRatio * 20);
           const opacityAmount = progressRatio;
           const scaleAmount = 0.94 + progressRatio * 0.06;
